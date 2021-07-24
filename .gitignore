@@ -1,1 +1,7 @@
 /venv/
+# input data はgitに置かない
+/input/*
+!/input/README.md
+# output もgitに置かない
+/tmp_artifacts/*
+!/tmp_artifacts/README.md
