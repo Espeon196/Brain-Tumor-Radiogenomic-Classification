@@ -24,7 +24,7 @@ from model import BrainTumor2dModel
 from dsets import BrainTumor2dSimpleDataset, get_train_transforms, get_valid_transforms
 from utils import seed_everything
 
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 parser = argparse.ArgumentParser(description="Train model")
 parser.add_argument('--run', help="Run number", type=int, required=True)
@@ -34,6 +34,9 @@ args = parser.parse_args()
 FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.dirname(os.path.dirname(FILE_DIR))
 INPUT_DIR = args.input
+
+def log_scaler(name, value, step):
+    mlflow.log_metric(name, value)
 
 def prepare_dataloader(df, trn_idx, val_idx, data_path, config):
     train_ = df.loc[trn_idx, :].reset_index(drop=True)
@@ -60,15 +63,40 @@ def prepare_dataloader(df, trn_idx, val_idx, data_path, config):
     )
     return train_loader, val_loader
 
+def make_optimizer(params, name, **kwargs):
+    # to make Optimizer
+    return torch.optim.__dict__[name](params, **kwargs)
+
+def make_scheduler(optimizer, name, **kwargs):
+    # to make scheduler
+    return torch.optim.lr_scheduler.__dict__[name](optimizer, **kwargs)
+
 def main():
     with open(os.path.join(FILE_DIR, "config/config_{:0=3}.yaml".format(args.run))) as file:
         CONFIG = yaml.safe_load(file)
 
-    seed_everything(CONFIG['base']['seed'])
+    base_config = CONFIG['base']
+    seed_everything(base_config['seed'])
 
     df = pd.DataFrame(os.path.join(INPUT_DIR, CONFIG['csv_file']))
     print(INPUT_DIR)
 
+    folds = StratifiedKFold(n_splits=base_config['fold_num'], shuffle=True, random_state=base_config['seed']).split(df, y=df.MGMT_value.tolist())
+
+    model_config = CONFIG.model
+    optimizer_config = CONFIG.optimizer
+    scheduler_config = CONFIG.scheduler
+
+    for fold, (trn_idx, val_idx) in enumerate(folds):
+
+        model = BrainTumor2dModel(**model_config)
+        optimizer = make_optimizer(model.parameters(), **optimizer_config)
+        scheduler = make_scheduler(optimizer, **scheduler_config)
+
+        scaler = GradScaler()
+
+        for epoch in range(base_config['epochs']):
+            #
 
 if __name__ == "__main__":
     start_time = time.time()

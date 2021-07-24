@@ -6,7 +6,7 @@ base:
   seed: 719
   fold_num: 5
   epochs: 10
-  optuna: False
+  optuna: false
   train_bs: 8
   valid_bs: 16
   num_workers: 4
@@ -19,16 +19,16 @@ dataset:
 model:
   class: BrainTumor2dModel
   model_arch: efficientnet_b0
-  pretrained: True
+  pretrained: true
 
 optimizer:
-  type: Adam
-  lr: 1e-3
+  name: Adam
+  lr: 1.0e-3
   weight_decay: 0.0
 
 scheduler:
-  type: ReduceLROnPlateau
+  name: ReduceLROnPlateau
   mode: min
   patience: 3
-  min_lr: 1e-6
+  min_lr: 1.0e-6
 
