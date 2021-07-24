@@ -61,11 +61,12 @@ def get_inference_transforms(img_size):
     ], p=1.)
 
 class BrainTumor2dSimpleDataset(Dataset):
-    def __init__(self, df, img_size, transforms=None, output_label=True):
+    def __init__(self, df, data_path, img_size, transforms=None, output_label=True):
         self.paths = df["BraTS21ID"].values
         self.output_label = output_label
         if self.output_label:
             self.targets = df["MGMT_value"].values
+        self.data_path = data_path
         self.img_size = img_size
         self.transforms = transforms
 
@@ -74,7 +75,7 @@ class BrainTumor2dSimpleDataset(Dataset):
 
     def __getitem__(self, index):
         _id = self.paths[index]
-        patient_path = f'./input/rsna-miccai-brain-tumor-radiogenomic-classification/train/{str(_id).zfill(5)}/'
+        patient_path = os.path.join(self.data_path, 'train/{str(_id).zfill(5)}/')
         channels = []
         for t in ("FLAIR", "T1w", "TqwCE"):
             t_paths = sorted(
@@ -95,13 +96,13 @@ class BrainTumor2dSimpleDataset(Dataset):
             channels.append(channel)
 
         if self.transforms:
-            img = self.transforms(image=channels)['image']
+            channels = self.transforms(image=channels)['image']
 
         if self.output_label:
             target = torch.tensor(self.targets[index], dtype=torch.float)
-            return img, target
+            return channels, target
         else:
-            return img
+            return channels
 
 def load_dicom(path):
     dicom = pydicom.read_file(path)
@@ -111,3 +112,6 @@ def load_dicom(path):
         data = data / np.max(data)
     data = (data * 255).astype(np.uint8)
     return data
+
+if __name__ == "__main__":
+    print()

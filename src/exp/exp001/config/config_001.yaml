@@ -1,5 +1,6 @@
 experiment_name: Simple Baseline
 bucket_name: brain-tumor-mlflow
+csv_file: train_labels.csv
 
 base:
   seed: 719
@@ -8,15 +9,16 @@ base:
   optuna: False
   train_bs: 8
   valid_bs: 16
+  num_workers: 4
   accum_iter: 2
 
 dataset:
   class: BrainTumor2dSimpleDataset
-  img_size: none
+  img_size: 256
 
 model:
   class: BrainTumor2dModel
-  model_arch: efficientnet-b0
+  model_arch: efficientnet_b0
   pretrained: True
 
 optimizer:

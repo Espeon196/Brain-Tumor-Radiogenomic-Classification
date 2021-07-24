@@ -1,5 +1,6 @@
 import timm
 from torch import nn
+import torch
 
 
 class BrainTumor2dModel(nn.Module):
@@ -12,3 +13,12 @@ class BrainTumor2dModel(nn.Module):
     def forward(self, x):
         out = self.model(x)
         return out
+
+if __name__ == "__main__":
+    model = BrainTumor2dModel(model_arch='efficientnet_b0', pretrained=False)
+    batchsize, C, H, W = 2, 3, 256, 256
+    input = torch.randn(batchsize, C, H, W)
+    logit = model(input)
+    print(logit.shape)
+    from torchsummary import summary
+    print(summary(model, (3, 256, 256)))
