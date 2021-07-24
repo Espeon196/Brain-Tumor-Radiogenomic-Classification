@@ -1,5 +1,6 @@
 /venv/
 /.idea
+/src/mlruns
 # input data はgitに置かない
 /input/*
 !/input/README.md

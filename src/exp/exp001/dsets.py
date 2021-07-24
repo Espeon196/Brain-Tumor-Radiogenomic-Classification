@@ -74,7 +74,7 @@ class BrainTumor2dSimpleDataset(Dataset):
 
     def __getitem__(self, index):
         _id = self.paths[index]
-        patient_path = f'src/input/rsna-miccai-brain-tumor-radiogenomic-classification/train/{str(_id).zfill(5)}/'
+        patient_path = f'./input/rsna-miccai-brain-tumor-radiogenomic-classification/train/{str(_id).zfill(5)}/'
         channels = []
         for t in ("FLAIR", "T1w", "TqwCE"):
             t_paths = sorted(
