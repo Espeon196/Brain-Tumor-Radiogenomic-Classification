@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 JST = timezone(timedelta(hours=+9), 'JST')
 from tqdm.auto import tqdm
 import shutil
+import statistics
 
 import torch
 import torch.nn as nn
@@ -29,6 +30,8 @@ from utils import seed_everything, MlflowWriter
 
 import warnings
 warnings.filterwarnings("ignore")
+
+COMPETITION_NAME = "BrainTumorRadiogenomicClassification"
 
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -85,7 +88,7 @@ def make_criterion(name, **kwargs):
     return nn.__dict__[name](**kwargs)
 
 
-def train_one_epoch(epoch, model, loss_fn, train_loader, optimizer, scaler, config, scheduler=None, writer=None):
+def train_one_epoch(fold, epoch, model, loss_fn, train_loader, optimizer, scaler, config, scheduler=None, writer=None):
     model.train()
 
     t = time.time()
@@ -135,9 +138,9 @@ def train_one_epoch(epoch, model, loss_fn, train_loader, optimizer, scaler, conf
 
     epoch_loss = epoch_loss / sample_num
     if writer:
-        writer.log_metric("train/loss", epoch_loss, epoch)
+        writer.log_metric("fold-{}/train/loss".format(fold), epoch_loss, epoch)
 
-def valid_one_epoch(epoch, model, loss_fn, val_loader, config, scheduler=None, writer=None):
+def valid_one_epoch(fold, epoch, model, loss_fn, val_loader, config, scheduler=None, writer=None):
     model.eval()
 
     t = time.time()
@@ -186,9 +189,9 @@ def valid_one_epoch(epoch, model, loss_fn, val_loader, config, scheduler=None, w
             scheduler.step()
 
     if writer:
-        writer.log_metric("val/loss", epoch_loss, epoch)
-        writer.log_metric("val/acc", epoch_acc, epoch)
-        writer.log_metric("val/auc", epoch_auc, epoch)
+        writer.log_metric("fold-{}/val/loss".format(fold), epoch_loss, epoch)
+        writer.log_metric("fold-{}/val/acc".format(fold), epoch_acc, epoch)
+        writer.log_metric("fold-{}/val/auc".format(fold), epoch_auc, epoch)
 
     return epoch_auc, image_preds_all, image_targets_all
 
@@ -196,14 +199,21 @@ def main():
     with open(os.path.join(FILE_DIR, "config/config_{:0=3}.yaml".format(args.config))) as file:
         CONFIG = yaml.safe_load(file)
 
+    meta_config = CONFIG['meta']
     base_config = CONFIG['base']
     seed_everything(base_config['seed'])
 
-    experiment_name = "[{}-{:0=3}] {}".format(EXP_CODE, args.config, CONFIG['experiment_name'])
-    writer = MlflowWriter(experiment_name=experiment_name)
+    # MLflow client 準備
+    writer = MlflowWriter(experiment_name=COMPETITION_NAME)
+    run_name = "[{}-{:0=3}] {}".format(EXP_CODE, args.config, meta_config['run_name'])
+    tags = {"mlflow.runName": run_name,
+            "exp_code": EXP_CODE,
+            "config": args.config}
+    writer.create_run_id(tags=tags)
+    writer.log_params_from_config(config=CONFIG)
 
     #print(os.path.join(INPUT_DIR, CONFIG['csv_file']))
-    df = pd.read_csv(os.path.join(INPUT_DIR, CONFIG['csv_file']))
+    df = pd.read_csv(os.path.join(INPUT_DIR, meta_config['csv_file']))
 
     folds = StratifiedKFold(n_splits=base_config['fold_num'], shuffle=True, random_state=base_config['seed']).split(df, y=df.MGMT_value.tolist())
 
@@ -212,10 +222,10 @@ def main():
     scheduler_config = CONFIG['scheduler']
     criterion_config = CONFIG['criterion']
 
+    fold_best_aucs = []
+
     for fold, (trn_idx, val_idx) in enumerate(folds):
         print('Training with {} started'.format(fold))
-        writer.create_run_id(fold=fold)
-        writer.log_params_from_config(config=CONFIG)
 
         #SAVE_PATH_TMP = os.path.join(SAVE_PATH, "tmp_{}".format(fold))
         #os.makedirs(SAVE_PATH_TMP, exist_ok=True)
@@ -229,17 +239,17 @@ def main():
         scaler = GradScaler()
 
         best_epoch = None
-        best_auc = 0.
+        best_auc = -1.0
         fold_preds = None
         fold_targets = None
 
         for epoch in range(base_config['epochs']):
             print("epoch: ", epoch)
 
-            train_one_epoch(epoch, model, criterion, train_loader, optimizer, scaler, config=base_config, scheduler=None, writer=writer)
+            train_one_epoch(fold, epoch, model, criterion, train_loader, optimizer, scaler, config=base_config, scheduler=None, writer=writer)
 
             with torch.no_grad():
-                epoch_auc, image_preds, image_targets = valid_one_epoch(epoch, model, criterion, val_loader, config=base_config, scheduler=scheduler, writer=writer)
+                epoch_auc, image_preds, image_targets = valid_one_epoch(fold, epoch, model, criterion, val_loader, config=base_config, scheduler=scheduler, writer=writer)
                 writer.log_metric("lr", optimizer.param_groups[0]['lr'], epoch)
 
             if epoch_auc >= best_auc:
@@ -248,14 +258,18 @@ def main():
                 fold_preds = image_preds
                 fold_targets = image_targets
 
-                torch.save(model.state_dict(), os.path.join(SAVE_PATH, '{}_fold_{}_best.pth'.format(experiment_name, fold)))
+                torch.save(model.state_dict(), os.path.join(SAVE_PATH, '{}_fold_{}_best.pth'.format(run_name.replace(' ', '_'), fold)))
 
         print("best model is {} epoch ({})".format(best_epoch, best_auc))
-        writer.log_artifact(local_path=os.path.join(SAVE_PATH, '{}_fold_{}_best.pth'.format(experiment_name, fold)))
+        writer.log_metric('fold-{}/AUC'.format(fold), best_auc)
+        fold_best_aucs.append(best_auc)
+        writer.log_artifact(local_path=os.path.join(SAVE_PATH, '{}_fold_{}_best.pth'.format(run_name.replace(' ', '_'), fold)))
 
         del model, optimizer, train_loader, val_loader, scaler, scheduler
         torch.cuda.empty_cache()
-        writer.set_terminated()
+
+    writer.log_metric('AUC', statistics.mean(fold_best_aucs))
+    writer.set_terminated()
 
 if __name__ == "__main__":
     start_time = time.time()
