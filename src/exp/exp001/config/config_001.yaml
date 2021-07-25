@@ -1,9 +1,9 @@
 experiment_name: Simple Baseline
-bucket_name: brain-tumor-mlflow
 csv_file: train_labels.csv
 
 base:
   seed: 719
+  img_size: 256
   fold_num: 5
   epochs: 10
   optuna: false
@@ -11,13 +11,14 @@ base:
   valid_bs: 16
   num_workers: 4
   accum_iter: 2
+  trn_schd_batch_update: false
+  val_schd_loss_update: true
 
 dataset:
-  class: BrainTumor2dSimpleDataset
-  img_size: 256
+  name: BrainTumor2dSimpleDataset
 
 model:
-  class: BrainTumor2dModel
+  name: BrainTumor2dModel
   model_arch: efficientnet_b0
   pretrained: true
 
@@ -32,3 +33,5 @@ scheduler:
   patience: 3
   min_lr: 1.0e-6
 
+criterion:
+  name: BCEWithLogitsLoss
