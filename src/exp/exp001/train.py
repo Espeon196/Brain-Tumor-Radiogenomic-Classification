@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timedelta, timezone
 JST = timezone(timedelta(hours=+9), 'JST')
 from tqdm.auto import tqdm
+import shutil
 
 import torch
 import torch.nn as nn
@@ -37,7 +38,7 @@ FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 EXP_CODE = FILE_DIR[-6:]
 SRC_DIR = os.path.dirname(os.path.dirname(FILE_DIR))
 INPUT_DIR = args.input
-SAVE_PATH_TMP = os.path.join(SRC_DIR, 'tmp_artifacts')
+SAVE_PATH = os.path.join(SRC_DIR, 'tmp_artifacts')
 
 def prepare_dataloader(df, trn_idx, val_idx, data_path, config):
     train_ = df.loc[trn_idx, :].reset_index(drop=True)
@@ -92,11 +93,13 @@ def train_one_epoch(epoch, model, loss_fn, train_loader, optimizer, scaler, conf
     pbar = tqdm(enumerate(train_loader), total=len(train_loader))
     for step, (imgs, image_labels) in pbar:
         imgs = imgs.to(DEVICE).float()
-        image_labels = image_labels.to(DEVICE).long()
+        image_labels = image_labels.to(DEVICE).float()
 
         with autocast():
             image_preds = model(imgs)  # output = model(input)
 
+            # 次元をそろえる
+            image_labels = image_labels.unsqueeze(1)
             loss = loss_fn(image_preds, image_labels)
 
         scaler.scale(loss).backward()
@@ -143,7 +146,8 @@ def valid_one_epoch(epoch, model, loss_fn, val_loader, config, scheduler=None, w
     pbar = tqdm(enumerate(val_loader), total=len(val_loader))
     for step, (imgs, image_labels) in pbar:
         imgs = imgs.to(DEVICE).float()
-        image_labels = image_labels.to(DEVICE).long()
+        image_labels = image_labels.to(DEVICE).float()
+
 
         image_preds = model(imgs)  # output = model(input)
 
@@ -151,6 +155,8 @@ def valid_one_epoch(epoch, model, loss_fn, val_loader, config, scheduler=None, w
         image_preds_all += [image_preds.detach().cpu().numpy()]
         image_targets_all += [image_labels.detach().cpu().numpy()]
 
+        # 次元をそろえる
+        image_labels = image_labels.unsqueeze(1)
         loss = loss_fn(image_preds, image_labels)
 
         loss_sum += loss.item() * image_labels.shape[0]
@@ -208,6 +214,9 @@ def main():
         writer.create_run_id(fold=fold)
         writer.log_params_from_config(config=CONFIG)
 
+        #SAVE_PATH_TMP = os.path.join(SAVE_PATH, "tmp_{}".format(fold))
+        #os.makedirs(SAVE_PATH_TMP, exist_ok=True)
+
         train_loader, val_loader = prepare_dataloader(df, trn_idx, val_idx, data_path=os.path.join(INPUT_DIR, 'train'), config=base_config)
         model = make_model(**model_config).to(DEVICE)
         optimizer = make_optimizer(model.parameters(), **optimizer_config)
@@ -216,6 +225,11 @@ def main():
 
         scaler = GradScaler()
 
+        best_epoch = None
+        best_auc = 0.
+        fold_preds = None
+        fold_targets = None
+
         for epoch in range(base_config['epochs']):
             print("epoch: ", epoch)
 
@@ -223,8 +237,22 @@ def main():
 
             with torch.no_grad():
                 epoch_auc, image_preds, image_targets = valid_one_epoch(epoch, model, criterion, val_loader, config=base_config, scheduler=scheduler, writer=writer)
+                writer.log_metric("lr", optimizer.param_groups[0]['lr'], epoch)
 
-            torch.save(model.state_dict(), os.path.join(SAVE_PATH_TMP, '{}_fold_{}_epoch_{}'.format(experiment_name, fold, epoch)))
+            if epoch_auc >= best_auc:
+                best_epoch = epoch
+                best_auc = epoch_auc
+                fold_preds = image_preds
+                fold_targets = image_targets
+
+                torch.save(model.state_dict(), os.path.join(SAVE_PATH, '{}_fold_{}_best.pth'.format(experiment_name, fold)))
+
+        print("best model is {} epoch ({})".format(best_epoch, best_auc))
+        writer.log_artifact(local_path=os.path.join(SAVE_PATH, '{}_fold_{}_best.pth'.format(experiment_name, fold)))
+
+        del model, optimizer, train_loader, val_loader, scaler, scheduler
+        torch.cuda.empty_cache()
+        writer.set_terminated()
 
 if __name__ == "__main__":
     start_time = time.time()

@@ -4,13 +4,14 @@ csv_file: train_labels.csv
 base:
   seed: 719
   img_size: 256
-  fold_num: 5
-  epochs: 10
+  fold_num: 2
+  epochs: 3
   optuna: false
   train_bs: 8
   valid_bs: 16
   num_workers: 4
   accum_iter: 2
+  verbose_step: 1
   trn_schd_batch_update: false
   val_schd_loss_update: true
 
