@@ -31,13 +31,13 @@ DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 parser = argparse.ArgumentParser(description="Train model")
 parser.add_argument('--config', help="Config number", type=int, required=True)
-parser.add_argument('--input', help="input data folder", type=str, required=True)
+parser.add_argument('--input', help="input data folder", type=str)
 args = parser.parse_args()
 
 FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 EXP_CODE = FILE_DIR[-6:]
 SRC_DIR = os.path.dirname(os.path.dirname(FILE_DIR))
-INPUT_DIR = args.input
+INPUT_DIR = args.input if args.input else os.path.join(SRC_DIR, 'input')
 SAVE_PATH = os.path.join(SRC_DIR, 'tmp_artifacts')
 
 def prepare_dataloader(df, trn_idx, val_idx, data_path, config):
