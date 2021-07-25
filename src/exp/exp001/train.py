@@ -27,6 +27,9 @@ from dsets import BrainTumor2dSimpleDataset, get_train_transforms, get_valid_tra
 import dsets as my_dsets
 from utils import seed_everything, MlflowWriter
 
+import warnings
+warnings.filterwarnings("ignore")
+
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 parser = argparse.ArgumentParser(description="Train model")

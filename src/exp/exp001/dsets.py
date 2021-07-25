@@ -126,3 +126,11 @@ if __name__ == "__main__":
     ds_iter = iter(ds)
     for i, (channels, target) in enumerate(ds_iter):
         print("[{}]channels shape: {}, target: {}".format(i, channels.shape, target))
+
+    ds = BrainTumor2dSimpleDataset(df, data_path=os.path.join(INPUT_DIR, 'train'), img_size=256, transforms=None)
+    ds_iter = iter(ds)
+    for i, (channels, target) in enumerate(ds_iter):
+        for j in range(3):
+            plt.subplot(1, 3, j+1)
+            plt.imshow(channels[:, :, j], cmap='gray')
+        plt.show()
