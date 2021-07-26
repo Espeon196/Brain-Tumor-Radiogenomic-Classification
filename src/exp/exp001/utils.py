@@ -3,6 +3,7 @@ import os
 import numpy as np
 import torch
 import mlflow
+import yaml
 
 
 def seed_everything(seed):
@@ -31,11 +32,20 @@ class MlflowWriter():
             self.experiment_id = self.client.get_experiment_by_name(experiment_name).experiment_id
         self.run_id = None
 
+    def set_artifact_location_to_gs(self, bucket, meta_filepath):
+        with open(filepath) as file:
+            meta = yaml.safe_load(meta_filepath)
+        meta['artifact_location'] = f'gs://{bucket}/artifacts'
+        with open(filepath, 'w') as file:
+            yaml.dump(meta, file, default_flow_style=False)
+
     def create_run_id(self, tags=None):
         self.run_id = self.client.create_run(self.experiment_id, tags=tags).info.run_id
 
-    def log_params_from_config(self, config):
+    def log_params_from_config(self, config, target=None):
         for key, value in config.items():
+            if target is not None:
+                key = '{}.{}'.format(target, key)
             self._explore_recursive(key, value)
 
     def _explore_recursive(self, parent, element):

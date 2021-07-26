@@ -56,7 +56,7 @@ def prepare_dataloader(df, trn_idx, val_idx, data_path, config):
     train_loader = DataLoader(
         train_ds,
         batch_size=config['train_bs'],
-        pin_memory=True,
+        pin_memory=False,
         drop_last=False,
         shuffle=True,
         num_workers=config['num_workers'],
@@ -67,7 +67,7 @@ def prepare_dataloader(df, trn_idx, val_idx, data_path, config):
         batch_size=config['valid_bs'],
         num_workers=config['num_workers'],
         shuffle=False,
-        pin_memory=True,
+        pin_memory=False,
     )
     return train_loader, val_loader
 
@@ -205,22 +205,31 @@ def main():
 
     # MLflow client 準備
     writer = MlflowWriter(experiment_name=COMPETITION_NAME)
+    # artifactsの保存先をGCSに変更
+    if not meta_config['DEBUG']:
+        meta_filepath = f"{SRC_DIR}/mlruns/{exp_id}/meta.yaml"
+        writer.set_artifact_location_to_gs(meta_config['bucket_name'], )
     run_name = "[{}-{:0=3}] {}".format(EXP_CODE, args.config, meta_config['run_name'])
     tags = {"mlflow.runName": run_name,
             "exp_code": EXP_CODE,
             "config": args.config}
     writer.create_run_id(tags=tags)
-    writer.log_params_from_config(config=CONFIG)
+    writer.log_params_from_config(config=base_config, target='base')
 
-    #print(os.path.join(INPUT_DIR, CONFIG['csv_file']))
     df = pd.read_csv(os.path.join(INPUT_DIR, meta_config['csv_file']))
 
     folds = StratifiedKFold(n_splits=base_config['fold_num'], shuffle=True, random_state=base_config['seed']).split(df, y=df.MGMT_value.tolist())
 
     model_config = CONFIG['model']
+    dataset_config = CONFIG['dataset']
     optimizer_config = CONFIG['optimizer']
     scheduler_config = CONFIG['scheduler']
     criterion_config = CONFIG['criterion']
+    writer.log_params_from_config(config=model_config, target='model')
+    writer.log_params_from_config(config=dataset_config, target='dataset')
+    writer.log_params_from_config(config=optimizer_config, target='optimizer')
+    writer.log_params_from_config(config=scheduler_config, target='scheduler')
+    writer.log_params_from_config(config=criterion_config, target='criterion')
 
     fold_best_aucs = []
 
