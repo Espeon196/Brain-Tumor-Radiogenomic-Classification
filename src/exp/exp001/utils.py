@@ -32,11 +32,12 @@ class MlflowWriter():
             self.experiment_id = self.client.get_experiment_by_name(experiment_name).experiment_id
         self.run_id = None
 
-    def set_artifact_location_to_gs(self, bucket, meta_filepath):
-        with open(filepath) as file:
-            meta = yaml.safe_load(meta_filepath)
-        meta['artifact_location'] = f'gs://{bucket}/artifacts'
-        with open(filepath, 'w') as file:
+    def set_artifact_location_to_gs(self, bucket, mlruns_filepath):
+        meta_filepath = f'{mlruns_filepath}/mlruns/{self.experiment_id}/meta.yaml'
+        with open(meta_filepath) as file:
+            meta = yaml.safe_load(file)
+        meta['artifact_location'] = 'gs://{}/artifacts'.format(bucket)
+        with open(meta_filepath, 'w') as file:
             yaml.dump(meta, file, default_flow_style=False)
 
     def create_run_id(self, tags=None):
@@ -74,8 +75,11 @@ class MlflowWriter():
         self.client.set_terminated(self.run_id)
 
 if __name__ == "__main__":
+    FILE_DIR = os.path.dirname(os.path.abspath(__file__))
+    SRC_DIR = os.path.dirname(os.path.dirname(FILE_DIR))
     writer = MlflowWriter("test_experiment")
-    writer.create_run_id(fold=0)
+    writer.set_artifact_location_to_gs('bucket', SRC_DIR)
+    writer.create_run_id()
     config = {'A': {'a': 1}, 'B': '2'}
     writer.log_params_from_config(config)
     writer.log_metric('A', 3, step=0)

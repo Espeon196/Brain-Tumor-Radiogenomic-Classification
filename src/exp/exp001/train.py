@@ -207,8 +207,7 @@ def main():
     writer = MlflowWriter(experiment_name=COMPETITION_NAME)
     # artifactsの保存先をGCSに変更
     if not meta_config['DEBUG']:
-        meta_filepath = f"{SRC_DIR}/mlruns/{exp_id}/meta.yaml"
-        writer.set_artifact_location_to_gs(meta_config['bucket_name'], )
+        writer.set_artifact_location_to_gs(meta_config['bucket_name'], SRC_DIR)
     run_name = "[{}-{:0=3}] {}".format(EXP_CODE, args.config, meta_config['run_name'])
     tags = {"mlflow.runName": run_name,
             "exp_code": EXP_CODE,
